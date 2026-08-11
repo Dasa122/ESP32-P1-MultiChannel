@@ -1,0 +1,76 @@
+name: Compile and Release OTA
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      SKETCH: .
+      FQBN: esp32:esp32:esp32c3
+      BUILD_DIR: build
+      OTA_BIN: ESP32-P1-MultiChannel-ota.bin
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+        with:
+          version: 0.36.0
+
+      - name: Install ESP32 core
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@3.0.7
+
+      - name: Install required libraries
+        run: |
+          arduino-cli lib update-index
+          arduino-cli lib install "ArduinoJson"
+          arduino-cli lib install "Async TCP@3.5.0"
+          arduino-cli lib install "ESP Async WebServer@3.12.0"
+          arduino-cli lib install "NTPClient"
+          arduino-cli lib install "PubSubClient"
+          arduino-cli lib install "Time"
+
+      - name: Compile sketch
+        run: |
+          mkdir -p "${BUILD_DIR}"
+          arduino-cli compile \
+            --fqbn "${FQBN}" \
+            --build-path "${BUILD_DIR}" \
+            --export-binaries \
+            --build-property build.partitions=min_spiffs \
+            "${SKETCH}"
+
+      - name: Create OTA asset name
+        run: |
+          cp "${BUILD_DIR}/ESP32-P1-MultiChannel.ino.bin" "${BUILD_DIR}/${OTA_BIN}"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ota-build
+          path: |
+            build/*.bin
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ota-main
+          target_commitish: main
+          name: OTA build from main
+          generate_release_notes: true
+          make_latest: true
+          files: |
+            build/${{ env.OTA_BIN }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

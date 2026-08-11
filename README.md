@@ -6,6 +6,11 @@ Just like the HomeWizzard p1 dongle, the purpose of this project is to read data
 
 I know this has been done before but not this project has more features. The ESP32C3 can be fed with the 5v of the meter. Since i have other projects which partially use the same software, it is only a small step to adapt it to a new function. So it inherits many nice features from the other projects. 
 
+## project layout
+- `ESP32-P1-MultiChannel.ino` is the active sketch entrypoint.
+- Feature code now lives under `src/` grouped by concern, such as `src/core`, `src/meter`, `src/network`, `src/web`, `src/config`, `src/storage`, `src/time`, and `src/system`.
+- Old sketch versions have been moved to `archive/` so the active build stays focused on the current release.
+
 The program has a lot of smart features. All settings can be done via the webinterface. Because the ESP32 has multiple serial ports, we have plenty debugging options. We can use a web console or the usb serial. In the console we can call some processes and watch the output. 
 See the [WIKI](https://github.com/patience4711/ESP-READ-P1-METER/wiki/GENERAL) for information on building it, the working, etc. 
 
@@ -26,9 +31,11 @@ Here are some links to the projects where i got my inspiration (thanks to all fo
 You can use the provided binary but if you must compile it yourself: Use arduino ide with the esp32 by espressif version 3.0.7 installed under boardmanager. The ota updates won't work with other versons.
 <br>Please note: by popular demand I have published the code here but i do not feel responsible for problems as to compiling. Impossible for me to know why it doesn't compile in your situation.
 
+The repository also includes a GitHub Actions workflow that compiles the active sketch on pushes to `main` and publishes an OTA binary as a GitHub Release asset.
+
 ## downloads
 jan 28 2026: There is a new version available.<br> 
-Download [ESP32-C3-P1METER-v0_4](https://github.com/patience4711/ESP32-C3-READ-P1-METER/blob/main/ESP32C3_P1METER_v0_4.ino.bin)<br>
+Download the latest OTA binary from the GitHub Releases page.<br>
 
 ## features
 - Simply to connect to your wifi

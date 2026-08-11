@@ -1,0 +1,12 @@
+# Arduino build output
+build/
+*.bin
+
+# Temporary local Arduino CLI test workspaces
+arduino-cli-libs/
+arduino-user-test/
+arduino-user-esp32async/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

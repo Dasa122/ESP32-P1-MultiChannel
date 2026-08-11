@@ -14,8 +14,6 @@ env:
   FQBN: esp32:esp32:esp32c3
   BUILD_DIR: build
   OTA_BIN: ESP32-P1-MultiChannel-ota.bin
-  ARDUINO_DATA_DIR: ~/.arduino15
-  ARDUINO_LIB_DIR: ~/Arduino/libraries
 
 jobs:
   build:
@@ -28,8 +26,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.arduino15
-            ~/Arduino/libraries
+            /home/runner/.arduino15
+            /home/runner/Arduino/libraries
           key: ${{ runner.os }}-arduino-esp32-3.0.7-libs-v1
           restore-keys: |
             ${{ runner.os }}-arduino-esp32-3.0.7-

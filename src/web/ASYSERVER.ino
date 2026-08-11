@@ -165,91 +165,81 @@ server.addHandler(&events);
 
 
 server.on("/get.Data", HTTP_GET, [](AsyncWebServerRequest *request) {
-// this link provides the general data on the frontpage
+// this link provides the general data on the frontpage — all 4 channels
     char temp[13]={0};
     uint8_t remote = 0;
     if(checkRemote( request->client()->remoteIP().toString()) ) remote = 1; // for the menu link
 
-// {"ps":"05:27 hr","pe":"21:53 hr","cnt":3,"rm":0,"st":1,"sl":1}  length 62
-    
     AsyncResponseStream *response = request->beginResponseStream("application/json");
-    //StaticJsonDocument<160> doc; //(160);
-    JsonDocument root; //(160);
- 
-    float enReturn = meter.ret_ht + meter.ret_lt;
-    float enCons   = meter.con_ht + meter.con_lt;
-    //uint16_t Power = meter.pwr_con[0] - meter.pwr_ret[0] + meter.pwr_con[1] - meter.pwr_ret[1] + meter.pwr_con[2] - meter.pwr_ret[2];
-    
-    
-    root["timestamp"] = String(timeStamp);
+    JsonDocument root;
 
-    root["CON_HT"] = round3(meter.con_ht);
-    root["CON_LT"] = round3(meter.con_lt); 
-    
-    root["RET_HT"] = round3(meter.ret_ht);
-    root["RET_LT"] = round3(meter.ret_lt);
-    
-    root["PWRC1"] = round0(meter.pwr_con[0]); 
-    root["PWRR1"] = round0(meter.pwr_ret[0]);
-    root["PWRC2"] = round0(meter.pwr_con[1]); 
-    root["PWRR2"] = round0(meter.pwr_ret[1]);
-    root["PWRC3"] = round0(meter.pwr_con[2]); 
-    root["PWRR3"] = round0(meter.pwr_ret[2]);
-    
-    root["enR"] = round3(enReturn); 
-    root["enC"] = round3(enCons); 
-    //root["aPo"] = round0(Power); 
-    root["gAs"] = round3(meter.gas); 
-    root["threeP"] = threePhase; 
+    root["timestamp"] = String(timeStamp);
+    root["threeP"] = threePhase;
     root["rm"] = remote;
-   
-    serializeJson(root, * response);
+
+    // Per-channel data array
+    JsonArray chArray = root["channels"].to<JsonArray>();
+    for (uint8_t i = 0; i < P1_NUM_CHANNELS; i++) {
+        JsonObject ch = chArray.add<JsonObject>();
+        ch["ch"] = i;
+        ch["valid"] = meters[i].valid;
+        ch["CON_HT"] = round3(meters[i].con_ht);
+        ch["CON_LT"] = round3(meters[i].con_lt);
+        ch["RET_HT"] = round3(meters[i].ret_ht);
+        ch["RET_LT"] = round3(meters[i].ret_lt);
+        ch["PWRC1"] = round0(meters[i].pwr_con[0]);
+        ch["PWRR1"] = round0(meters[i].pwr_ret[0]);
+        ch["PWRC2"] = round0(meters[i].pwr_con[1]);
+        ch["PWRR2"] = round0(meters[i].pwr_ret[1]);
+        ch["PWRC3"] = round0(meters[i].pwr_con[2]);
+        ch["PWRR3"] = round0(meters[i].pwr_ret[2]);
+        ch["enR"] = round3(meters[i].ret_ht + meters[i].ret_lt);
+        ch["enC"] = round3(meters[i].con_ht + meters[i].con_lt);
+        ch["gAs"] = round3(meters[i].gas);
+    }
+
+    serializeJson(root, *response);
     request->send(response);
 });
 
 server.on("/api/v1/data", HTTP_GET, [](AsyncWebServerRequest *request) 
 {
-    // this link provides the data on the api request
-    consoleOut("answer a api request");
-    // Log heap before processing
-    //Serial.printf("[API] Free heap before processing: %u bytes\n", ESP.getFreeHeap());
-    // errorcheck
+    // Support ?ch=N query param for per-channel data, defaults to channel 0
+    uint8_t ch = 0;
+    if (request->hasParam("ch")) {
+        int p = request->getParam("ch")->value().toInt();
+        if (p >= 0 && p < P1_NUM_CHANNELS) ch = (uint8_t)p;
+    }
 
-    // if (!request->client()) {
-    //     request->send(500, "application/json", "{\"error\":\"client not available\"}");
-    //     return;
-    // }
-
+    consoleOut("answer api request ch=" + String(ch));
     AsyncResponseStream *response = request->beginResponseStream("application/json");
-    JsonDocument root; //(length current 291);
-    
-    root["smr_version"] = String(meter.smr);
-    root["meter_model"] = meterType;
-    root["wifi_ssid"] = "WiFi.SSID()";
-    root["wifi_strength"] = WiFi.RSSI();
-    root["total_power_import_t1_kwh"] = round3(meter.con_ht); // tariff 1
-    root["total_power_import_t2_kwh"] = round3(meter.con_lt); // tariff 2
-    root["total_power_export_t1_kwh"] = round3(meter.ret_ht); // tariff 1
-    root["total_power_export_t2_kwh"] = round3(meter.ret_lt); // tariff 2   
-    // bower balance calculations
-    float pwr_l1 = meter.pwr_con[0] - meter.pwr_ret[0];
-    float pwr_l2 = meter.pwr_con[1] - meter.pwr_ret[1];
-    float pwr_l3 = meter.pwr_con[2] - meter.pwr_ret[2];
-    float pwr_tot = pwr_l1 + pwr_l2 + pwr_l3; 
-    
-    // in a 1 phase meter active_power_w is equal to active_power_l1_w
-    root["active_power_w"]    = round0(pwr_tot); // balance of ret and con of all 3 phases
-    root["active_power_l1_w"] = round0(pwr_l1);  // balance of ret & con
-    if(threePhase)
-        {
-          root["active_power_l2_w"]  = round0(pwr_l2); // balance of ret & con
-          root["active_power_l3_w"]  = round0(pwr_l3); // balance of ret & con
-        }
-    
-    String jsonString;
-    serializeJson(root, * response);
+    JsonDocument root;
 
-    // Final heap check
+    MeterData& m = meters[ch];
+    root["smr_version"] = String(m.smr);
+    root["meter_model"] = meterType;
+    root["channel"] = ch;
+    root["valid"] = m.valid;
+    root["wifi_ssid"] = WiFi.SSID();
+    root["wifi_strength"] = WiFi.RSSI();
+    root["total_power_import_t1_kwh"] = round3(m.con_ht);
+    root["total_power_import_t2_kwh"] = round3(m.con_lt);
+    root["total_power_export_t1_kwh"] = round3(m.ret_ht);
+    root["total_power_export_t2_kwh"] = round3(m.ret_lt);
+
+    float pwr_l1 = m.pwr_con[0] - m.pwr_ret[0];
+    float pwr_l2 = m.pwr_con[1] - m.pwr_ret[1];
+    float pwr_l3 = m.pwr_con[2] - m.pwr_ret[2];
+    float pwr_tot = pwr_l1 + pwr_l2 + pwr_l3;
+
+    root["active_power_w"]    = round0(pwr_tot);
+    root["active_power_l1_w"] = round0(pwr_l1);
+    if (threePhase) {
+        root["active_power_l2_w"] = round0(pwr_l2);
+        root["active_power_l3_w"] = round0(pwr_l3);
+    }
+
+    serializeJson(root, *response);
     actionFlag = 130;
     request->send(response);  
 });

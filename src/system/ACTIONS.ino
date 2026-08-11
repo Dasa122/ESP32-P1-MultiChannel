@@ -39,11 +39,14 @@
     }    
     
 
-    if (actionFlag == 26) { //polling
+    if (actionFlag == 26) { //polling — poll current channel
       actionFlag = 0; //reset the actionflag
-      meterPoll(); // read and decode the telegram
-      sendMqtt(false);
-      sendMqtt(true); //gas
+      uint8_t ch = currentChannel;
+      currentChannel = (currentChannel + 1) % P1_NUM_CHANNELS;
+      digitalWrite(P1_ENABLE_PINS[ch], HIGH);
+      delay(100);
+      meterPollCh(ch);
+      digitalWrite(P1_ENABLE_PINS[ch], LOW);
     }    
     if (actionFlag == 126) { //polling
       actionFlag = 0; //reset the actionflag
@@ -52,21 +55,19 @@
     }
 
     // decode the testfile
-    if (actionFlag == 28) { //
+    if (actionFlag == 28) { // decode testfile for channel 0
       actionFlag = 0; //reset the actionflag
       if(!testTelegram) {
         consoleOut("telegram is modified, reboot if you want to test");
         return;
       }
-      // if we have te telegram read from spiffs we can decode it
-      polled=true;
-      //we need the readCRC so we extract it from the file
-         int len = strlen(teleGram);
-         strncpy(readCRC, teleGram + len-4, 4); 
-         consoleOut("readCRC = " + String(readCRC) );
-         decodeTelegram();
-         sendMqtt(false);
-         sendMqtt(true);
+      polled_ch[0] = true;
+      int len = strlen(teleGram_ch[0]);
+      strncpy(readCRC_ch[0], teleGram_ch[0] + len - 4, 4);
+      consoleOut("readCRC = " + String(readCRC_ch[0]));
+      decodeTelegramCh(0);
+      sendMqttCh(0, false);
+      sendMqttCh(0, true);
     }
 
 // test the reception of a telegram at boot

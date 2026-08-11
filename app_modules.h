@@ -5,6 +5,7 @@
 
 #include "src/meter/AAA-PARSE-TELEGRAM.ino"
 #include "src/meter/AAA_READ_SERIAL.ino"
+#include "src/meter/MULTI_CHANNEL.ino"
 #include "src/meter/SERIAL.ino"
 
 #include "src/storage/SPIFFS_RW.ino"

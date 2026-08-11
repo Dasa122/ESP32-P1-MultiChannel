@@ -122,7 +122,7 @@ DNSServer dnsServer;
 
 // variables mqtt ********************************************
   char  Mqtt_Broker[30];
-  char  Mqtt_outTopic[26]; // was 26
+  // Per-channel out topics declared above with MeterData array
   char  Mqtt_inTopic[26];  // was 26
   char  Mqtt_Username[26];
   char  Mqtt_Password[26];
@@ -151,9 +151,21 @@ DNSServer dnsServer;
 #define LED_UIT    HIGH
 #define knop          0  //
 #define led_onb       8  // onboard led was 2
-#define P1_ENABLE     5  // gpio5 if high the RX of the meter is pulled high
+
+// ---- Multi-channel P1 meter enable pins (pull HIGH to request telegram) ----
+#define P1_NUM_CHANNELS 4
+#define P1_ENABLE_0     5   // channel 0 (original, GPIO5)
+#define P1_ENABLE_1     4   // channel 1 (GPIO4)
+#define P1_ENABLE_2     6   // channel 2 (GPIO6)
+#define P1_ENABLE_3     7   // channel 3 (GPIO7)
+// All channels share one UART
 #define RXP1          3
 #define TXP1          2  // not used
+
+// P1_ENABLE pin array for round-robin access
+const uint8_t P1_ENABLE_PINS[P1_NUM_CHANNELS] = {P1_ENABLE_0, P1_ENABLE_1, P1_ENABLE_2, P1_ENABLE_3};
+// Backward-compat: old code referencing P1_ENABLE gets channel 0 pin
+#define P1_ENABLE P1_ENABLE_0
 
 #define OBIS_SMR             "1-3:0.2.8("
 #define OBIS_CON_LT   "1-0:1.8.1("
@@ -179,8 +191,34 @@ struct MeterData {
     uint16_t   pwr_con[3];
     uint16_t   pwr_ret[3];
     float   gas;
+    bool    valid;   // true when at least one successful poll completed
 };
-MeterData meter;
+MeterData meters[P1_NUM_CHANNELS];
+
+// Backward-compat alias: meter = meters[0]
+#define meter meters[0]
+
+// ---- Per-channel MQTT out topics ----
+char  Mqtt_outTopic_0[26];
+char  Mqtt_outTopic_1[26];
+char  Mqtt_outTopic_2[26];
+char  Mqtt_outTopic_3[26];
+char* Mqtt_outTopic_Ch[P1_NUM_CHANNELS] = {Mqtt_outTopic_0, Mqtt_outTopic_1, Mqtt_outTopic_2, Mqtt_outTopic_3};
+// Backward-compat: old code referencing Mqtt_outTopic gets channel 0
+#define Mqtt_outTopic Mqtt_outTopic_0
+
+// ---- Per-channel polled flags ----
+bool polled_ch[P1_NUM_CHANNELS] = {false, false, false, false};
+#define polled polled_ch[0]   // backward compat
+
+// ---- Per-channel telegrams ----
+char teleGram_ch[P1_NUM_CHANNELS][1060] = {{"not polled"},{"not polled"},{"not polled"},{"not polled"}};
+char readCRC_ch[P1_NUM_CHANNELS][5];
+#define teleGram teleGram_ch[0]   // backward compat
+#define readCRC  readCRC_ch[0]
+
+// ---- Current channel being polled ----
+uint8_t currentChannel = 0;
 
 String toSend = "";
  
@@ -227,13 +265,13 @@ bool bootTest;
 uint8_t meterType = 0;
 bool baudRate9600;
 bool rxInvert;
-bool polled = false;
+//bool polled = false;  // moved to multi-channel polled_ch[]
 int pollFreq = 300;
 // voor testing
 int www = 0;
 
-char teleGram[1060]={"not polled"};
-char readCRC[5];
+//char teleGram[1060]={"not polled"};  // moved to teleGram_ch[][]
+//char readCRC[5];                      // moved to readCRC_ch[][]
 bool threePhase = false;
 int testLength;
 int errorCode = 0;
@@ -285,8 +323,11 @@ void setup() {
   pinMode(knop, INPUT_PULLUP); // the button gpio4 D2 
   pinMode(led_onb, OUTPUT); // onboard led gpio0 D3
 
-  pinMode(P1_ENABLE, OUTPUT);// with this pin gpio14 (D5)  
-  digitalWrite(P1_ENABLE, LOW);
+  // Initialize all 4 P1 meter enable pins
+  for (uint8_t i = 0; i < P1_NUM_CHANNELS; i++) {
+    pinMode(P1_ENABLE_PINS[i], OUTPUT);
+    digitalWrite(P1_ENABLE_PINS[i], LOW);
+  }
   ledblink(1, 800);
   
   attachInterrupt(digitalPinToInterrupt(knop), isr, FALLING);
@@ -388,10 +429,21 @@ if(pollFreq != 0)
           consoleOut(toLog);
         }
         laatsteMeting += 1000UL * pollFreq ; // 
-        // the p1 meter only transmits when the rx line = high
-        digitalWrite(P1_ENABLE, HIGH);
-        meterPoll(); 
-        digitalWrite(P1_ENABLE, LOW);
+
+        // Round-robin poll: each cycle reads one channel
+        uint8_t ch = currentChannel;
+        currentChannel = (currentChannel + 1) % P1_NUM_CHANNELS;
+        
+        // Enable ONLY the current channel's pin
+        for (uint8_t i = 0; i < P1_NUM_CHANNELS; i++) {
+          digitalWrite(P1_ENABLE_PINS[i], (i == ch) ? HIGH : LOW);
+        }
+        delay(100); // let the meter wake up
+        meterPollCh(ch);
+        // Disable all after poll
+        for (uint8_t i = 0; i < P1_NUM_CHANNELS; i++) {
+          digitalWrite(P1_ENABLE_PINS[i], LOW);
+        }
    }
 }
 

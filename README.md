@@ -11,6 +11,73 @@ I know this has been done before but not this project has more features. The ESP
 - Feature code now lives under `src/` grouped by concern, such as `src/core`, `src/meter`, `src/network`, `src/web`, `src/config`, `src/storage`, `src/time`, and `src/system`.
 - Old sketch versions have been moved to `archive/` so the active build stays focused on the current release.
 
+## multi-channel wiring
+
+```mermaid
+graph TB
+    ESP32["ESP32-C3 Super Mini"]
+    
+    subgraph "Shared UART Bus"
+        UART["Serial1<br/>RX=GPIO3<br/>TX=GPIO2 (unused)"]
+    end
+    
+    subgraph "Meter 0"
+        M0["P1 Meter 0<br/>Enable: GPIO5"]
+    end
+    subgraph "Meter 1"
+        M1["P1 Meter 1<br/>Enable: GPIO4"]
+    end
+    subgraph "Meter 2"
+        M2["P2 Meter 2<br/>Enable: GPIO6"]
+    end
+    subgraph "Meter 3"
+        M3["P3 Meter 3<br/>Enable: GPIO7"]
+    end
+    
+    ESP32 -->|"Enable CH 0"| M0
+    ESP32 -->|"Enable CH 1"| M1
+    ESP32 -->|"Enable CH 2"| M2
+    ESP32 -->|"Enable CH 3"| M3
+    
+    M0 -.->|"4K7 pull-up"| UART
+    M1 -.->|"4K7 pull-up"| UART
+    M2 -.->|"4K7 pull-up"| UART
+    M3 -.->|"4K7 pull-up"| UART
+    
+    ESP32 --> UART
+```
+
+## software architecture
+
+```mermaid
+flowchart LR
+    subgraph "Loop - Round Robin"
+        CH0["Poll CH 0<br/>GPIO5 HIGH"]
+        CH1["Poll CH 1<br/>GPIO4 HIGH"]
+        CH2["Poll CH 2<br/>GPIO6 HIGH"]
+        CH3["Poll CH 3<br/>GPIO7 HIGH"]
+        CH0 --> CH1 --> CH2 --> CH3 --> CH0
+    end
+    
+    subgraph "Per-Channel Pipeline"
+        READ["read_into_array_ch()<br/>Capture telegram"]
+        CRC["decodeTelegramCh()<br/>Validate CRC16"]
+        PARSE["parseTelegramCh()<br/>Extract OBIS values"]
+        STORE["meters[ch]<br/>MeterData struct"]
+        READ --> CRC --> PARSE --> STORE
+    end
+    
+    subgraph "Output"
+        MQTT["sendMqttCh(ch)<br/>Pub to Mqtt_outTopic_chX"]
+        API["/get.Data<br/>JSON array<br/>/api/v1/data?ch=N"]
+        WEB["Homepage<br/>4-channel table"]
+    end
+    
+    STORE --> MQTT
+    STORE --> API
+    STORE --> WEB
+```
+
 The program has a lot of smart features. All settings can be done via the webinterface. Because the ESP32 has multiple serial ports, we have plenty debugging options. We can use a web console or the usb serial. In the console we can call some processes and watch the output. 
 See the [WIKI](https://github.com/patience4711/ESP-READ-P1-METER/wiki/GENERAL) for information on building it, the working, etc. 
 
@@ -39,9 +106,11 @@ Download the latest OTA binary from the GitHub Releases page.<br>
 
 ## features
 - Simply to connect to your wifi
+- **4 simultaneous P1 meters** via shared UART and round-robin polling
 - compatible with Home Wizzard p1 dongle
 - automatic polling or on demand via mqtt or http
 - data can be requested via http and mosquitto
+- **per-channel MQTT topics** for independent data streams
 - data is displayed on the frontpage, as a monthly report.
 - we can see the telegram sent by the meter.
 - Fast asyc webserver.
@@ -62,7 +131,16 @@ It starts with a "/" and ends with a "!". The telegram is spit out when the mete
 The program makes rx high and pulls-up the tx, next reads the serial port until the "/" is found. Now the following incoming bytes are stored in a char array until the endcharacter "!" is encountered. So now we have the full telegram as a char array.
 Next the checksum calculation is done and when the char array is approved, the interesting values can be extracted.
 
+### multi-channel operation
+Up to 4 meters share one UART (Serial1). Each meter has its own enable pin — only one enable pin is pulled HIGH at a time. The meters are polled round-robin: channel 0 → 1 → 2 → 3 → 0. Each channel stores its data independently in `meters[ch]` and publishes to its own MQTT topic (`Mqtt_outTopic_0` through `Mqtt_outTopic_3`). The web API serves all channels as a JSON array.
+
 ## changelog ##
+version ESP32-C3-P1METER-v0_5
+- multi-channel: read 4 P1 meters simultaneously via shared UART with individual enable pins
+- per-channel MQTT topics and JSON API with `?ch=N` query parameter
+- round-robin polling: one channel per interval, all 4 cycled in sequence
+- CI: separate quality check (PR) and OTA release (main) workflows with caching
+
 version ESP32-C3-P1METER-v0_4
 - rebewed the parsing of the telegram
 - made suitibel for other meters

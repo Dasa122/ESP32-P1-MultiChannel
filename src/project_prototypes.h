@@ -12,12 +12,16 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType 
 void initWebSocket();
 
 void parseTelegram();
+void parseTelegramCh(uint8_t ch);
 float parseValue(const char* p, const char* obis);
 float parseGasValue(const char* p);
 
 void meterPoll();
+void meterPollCh(uint8_t ch);
 bool read_into_array();
+bool read_into_array_ch(uint8_t ch);
 void decodeTelegram();
+void decodeTelegramCh(uint8_t ch);
 
 String putReport(const String& var);
 void printStruct(String bestand, int what);
@@ -53,6 +57,7 @@ void writeMonth(int maand);
 bool mqttConnect();
 void MQTT_Receive_Callback(char *topic, byte *payload, unsigned int length);
 void sendMqtt(bool gas);
+void sendMqttCh(uint8_t ch, bool gas);
 
 void loginAdmin(AsyncWebServerRequest *request);
 

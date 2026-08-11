@@ -258,7 +258,7 @@ char timeStamp[12]={"not polled"};
 uint8_t procesId = 1;
 
 #include "src/project_prototypes.h"
-#include "src/app_modules.h"
+#include "app_modules.h"
 
 // *****************************************************************************
 // *                              SETUP

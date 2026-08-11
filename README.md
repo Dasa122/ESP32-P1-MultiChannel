@@ -31,7 +31,7 @@ Here are some links to the projects where i got my inspiration (thanks to all fo
 You can use the provided binary but if you must compile it yourself: Use arduino ide with the esp32 by espressif version 3.0.7 installed under boardmanager. The ota updates won't work with other versons.
 <br>Please note: by popular demand I have published the code here but i do not feel responsible for problems as to compiling. Impossible for me to know why it doesn't compile in your situation.
 
-The repository also includes a GitHub Actions workflow that compiles the active sketch on pushes to `main` and publishes an OTA binary as a GitHub Release asset.
+The repository also includes GitHub Actions workflows for a separate PR quality check and for compiling plus publishing an OTA binary as a GitHub Release asset on `main`.
 
 ## downloads
 jan 28 2026: There is a new version available.<br> 

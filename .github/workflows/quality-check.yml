@@ -1,23 +1,21 @@
-name: Compile and Release OTA
+name: Quality Check
 
 on:
-  push:
+  pull_request:
     branches:
       - main
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-env:
-  SKETCH: .
-  FQBN: esp32:esp32:esp32c3
-  BUILD_DIR: build
-  OTA_BIN: ESP32-P1-MultiChannel-ota.bin
+  contents: read
 
 jobs:
-  build:
+  compile:
     runs-on: ubuntu-latest
+    env:
+      SKETCH: .
+      FQBN: esp32:esp32:esp32c3
+      BUILD_DIR: build
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -51,39 +49,3 @@ jobs:
             --export-binaries \
             --build-property build.partitions=min_spiffs \
             "${SKETCH}"
-
-      - name: Create OTA asset name
-        run: |
-          cp "${BUILD_DIR}/ESP32-P1-MultiChannel.ino.bin" "${BUILD_DIR}/${OTA_BIN}"
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ota-build
-          path: |
-            build/*.bin
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: ota-build
-          path: build
-
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ota-main
-          target_commitish: main
-          name: OTA build from main
-          generate_release_notes: true
-          make_latest: true
-          files: |
-            build/${{ env.OTA_BIN }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
